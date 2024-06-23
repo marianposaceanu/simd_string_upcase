@@ -48,6 +48,21 @@ The SIMD-optimized methods can significantly improve performance, particularly f
 By utilizing the parallel processing capabilities of modern CPUs, these methods reduce the number of 
 instructions needed to compute the length of a string.
 
+### Benchmarks
+
+Using instruction set: AVX2
+
+| String Size            | Implementation | Iterations per Second (i/s) | Comparison    |
+|------------------------|----------------|-----------------------------|---------------|
+| Small (2,000 chars)    | Ruby #upcase   | 37,196.0 i/s                |               |
+|                        | SIMD #upcase   | 514,957.2 i/s               | 13.84x faster |
+| Medium (200,000 chars) | Ruby #upcase   | 358.7 i/s                   |               |
+|                        | SIMD #upcase   | 5,372.2 i/s                 | 14.98x faster |
+| Large (2,000,000 chars)| Ruby #upcase   | 36.8 i/s                    |               |
+|                        | SIMD #upcase   | 841.0 i/s                   | 22.87x faster |
+
+**Note:** These benchmarks were run using Ruby 3.3 on macOS with a "Skylake" Intel Core i7 6820HQ CPU, which supports AVX2.
+
 ## Compatibility
 
 **Note:** This gem currently only works on x86 CPU architectures. Support for other architectures may be 
