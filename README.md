@@ -65,8 +65,7 @@ Using instruction set: AVX2
 
 ## Compatibility
 
-**Note:** This gem currently only works on x86 CPU architectures. Support for other architectures may be 
-added in the future.
+**Note:** This gem supports x86_64 CPUs and Apple Silicon Macs (M1 through M5) via ARM NEON.
 
 ## License
 
