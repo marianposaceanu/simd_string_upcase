@@ -1,8 +1,21 @@
 require 'benchmark/ips'
+require 'rbconfig'
 require 'securerandom'
 require 'simd_string_upcase'
 
-# Output the used instruction set
+def macos_sysctl(key)
+  return unless RbConfig::CONFIG['host_os'].include?('darwin')
+
+  value = `sysctl -n #{key} 2>/dev/null`.strip
+  value unless value.empty?
+end
+
+cpu_name = macos_sysctl('machdep.cpu.brand_string') || RbConfig::CONFIG['host_cpu']
+machine_model = macos_sysctl('hw.model') || 'unknown'
+
+puts "Ruby version: #{RUBY_VERSION} (#{RUBY_PLATFORM})"
+puts "CPU: #{cpu_name}"
+puts "Machine model: #{machine_model}"
 puts "Using instruction set: #{SIMDStringUpcase.instruction_set}"
 
 
@@ -20,12 +33,14 @@ unicode_string = "α" * 1_000 + "β" * 1_000  # Example with Unicode characters
 
 
 # Verify that all methods produce the same result for ASCII strings
-ruby_result = small_string.original_upcase
-simd_result = small_string.upcase
+[small_string, medium_string, large_string].each do |test_string|
+  ruby_result = test_string.original_upcase
+  simd_result = test_string.upcase
 
-if ruby_result != simd_result
-  puts "Error: Results don't match. Ruby: #{ruby_result}, SIMD: #{simd_result}"
-  exit
+  next if ruby_result == simd_result
+
+  puts "Error: Results don't match for #{test_string.length} bytes"
+  exit 1
 end
 
 # Benchmark with different string sizes for ASCII strings

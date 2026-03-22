@@ -72,12 +72,12 @@ Using instruction set: NEON
 
 | String Size             | Implementation | Iterations per Second (i/s) | Comparison   |
 |-------------------------|----------------|-----------------------------|--------------|
-| Small (2,000 chars)     | Ruby #upcase   | 1,671,575.1 i/s             |              |
-|                         | SIMD #upcase   | 1,413,944.1 i/s             | 1.18x slower |
-| Medium (200,000 chars)  | Ruby #upcase   | 7,536.7 i/s                 |              |
-|                         | SIMD #upcase   | 18,518.5 i/s                | 2.46x faster |
-| Large (2,000,000 chars) | Ruby #upcase   | 280.3 i/s                   |              |
-|                         | SIMD #upcase   | 1,823.9 i/s                 | 6.51x faster |
+| Small (2,000 chars)     | Ruby #upcase   | 1,645,781.1 i/s             |              |
+|                         | SIMD #upcase   | 5,325,565.5 i/s             | 3.24x faster |
+| Medium (200,000 chars)  | Ruby #upcase   | 7,434.5 i/s                 |              |
+|                         | SIMD #upcase   | 177,237.2 i/s               | 23.84x faster |
+| Large (2,000,000 chars) | Ruby #upcase   | 272.6 i/s                   |              |
+|                         | SIMD #upcase   | 19,756.9 i/s                | 72.47x faster |
 
 **Note:** These benchmarks were run using Ruby 3.4.2 on macOS with an Apple M4 CPU.
 

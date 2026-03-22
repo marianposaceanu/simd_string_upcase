@@ -39,8 +39,20 @@ class SIMDStringUpcaseTest < Minitest::Test
     assert_equal input.encoding, input.upcase.encoding
   end
 
+  def test_upcase_matches_original_for_large_ascii_input
+    input = ('abc123xyz! ' * 1_000)
+
+    assert_equal input.original_upcase, input.upcase
+  end
+
   def test_unicode_input_falls_back_to_ruby_behavior
     input = 'Straße Καλημέρα déjà vu'
+
+    assert_equal input.original_upcase, input.upcase
+  end
+
+  def test_unicode_after_ascii_chunks_falls_back_to_ruby_behavior
+    input = ('a' * 128) + 'é' + ('mixed123! ' * 16)
 
     assert_equal input.original_upcase, input.upcase
   end

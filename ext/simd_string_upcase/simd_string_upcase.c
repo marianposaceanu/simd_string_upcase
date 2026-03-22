@@ -28,6 +28,16 @@ static int has_neon = 0;
 
 static ID id_original_upcase;
 
+#define SMALL_STRING_FALLBACK_THRESHOLD 64
+
+static VALUE fallback_upcase(VALUE str) {
+    return rb_funcall(str, id_original_upcase, 0);
+}
+
+static int use_ruby_for_small_string(long len) {
+    return len < SMALL_STRING_FALLBACK_THRESHOLD;
+}
+
 static VALUE allocate_result_string(VALUE str) {
     VALUE result = rb_str_new(NULL, RSTRING_LEN(str));
 
@@ -78,11 +88,11 @@ static void detect_cpu_features() {
 #endif
 
 #if defined(__x86_64__) || defined(_M_X64)
-static VALUE upcase_sse2(VALUE self, VALUE str) {
-    char *text = StringValuePtr(str);
+static VALUE upcase_sse2(VALUE str) {
+    const unsigned char *text = (const unsigned char *)StringValuePtr(str);
     long len = RSTRING_LEN(str);
     VALUE result = allocate_result_string(str);
-    char *res_text = StringValuePtr(result);
+    unsigned char *res_text = (unsigned char *)StringValuePtr(result);
 
     __m128i lower_a = _mm_set1_epi8('a');
     __m128i lower_z = _mm_set1_epi8('z');
@@ -90,15 +100,25 @@ static VALUE upcase_sse2(VALUE self, VALUE str) {
 
     long i;
     for (i = 0; i <= len - 16; i += 16) {
-        __m128i chunk = _mm_loadu_si128((__m128i*)(text + i));
+        __m128i chunk = _mm_loadu_si128((const __m128i *)(text + i));
+
+        if (_mm_movemask_epi8(chunk) != 0) {
+            return fallback_upcase(str);
+        }
+
         __m128i mask_a = _mm_cmpgt_epi8(chunk, _mm_sub_epi8(lower_a, _mm_set1_epi8(1)));
         __m128i mask_z = _mm_cmplt_epi8(chunk, _mm_add_epi8(lower_z, _mm_set1_epi8(1)));
         __m128i mask = _mm_and_si128(mask_a, mask_z);
+
         chunk = _mm_sub_epi8(chunk, _mm_and_si128(mask, diff));
-        _mm_storeu_si128((__m128i*)(res_text + i), chunk);
+        _mm_storeu_si128((__m128i *)(res_text + i), chunk);
     }
 
     for (; i < len; i++) {
+        if (text[i] > 127) {
+            return fallback_upcase(str);
+        }
+
         if (text[i] >= 'a' && text[i] <= 'z') {
             res_text[i] = text[i] - ('a' - 'A');
         } else {
@@ -109,11 +129,11 @@ static VALUE upcase_sse2(VALUE self, VALUE str) {
     return result;
 }
 
-static VALUE upcase_avx1(VALUE self, VALUE str) {
-    char *text = StringValuePtr(str);
+static VALUE upcase_avx1(VALUE str) {
+    const unsigned char *text = (const unsigned char *)StringValuePtr(str);
     long len = RSTRING_LEN(str);
     VALUE result = allocate_result_string(str);
-    char *res_text = StringValuePtr(result);
+    unsigned char *res_text = (unsigned char *)StringValuePtr(result);
 
     __m256i lower_a = _mm256_set1_epi8('a');
     __m256i lower_z = _mm256_set1_epi8('z');
@@ -121,15 +141,25 @@ static VALUE upcase_avx1(VALUE self, VALUE str) {
 
     long i;
     for (i = 0; i <= len - 32; i += 32) {
-        __m256i chunk = _mm256_loadu_si256((__m256i*)(text + i));
+        __m256i chunk = _mm256_loadu_si256((const __m256i *)(text + i));
+
+        if (_mm256_movemask_epi8(chunk) != 0) {
+            return fallback_upcase(str);
+        }
+
         __m256i mask_a = _mm256_cmpgt_epi8(chunk, _mm256_sub_epi8(lower_a, _mm256_set1_epi8(1)));
         __m256i mask_z = _mm256_cmpgt_epi8(_mm256_set1_epi8('z' + 1), chunk);
         __m256i mask = _mm256_and_si256(mask_a, mask_z);
+
         chunk = _mm256_sub_epi8(chunk, _mm256_and_si256(mask, diff));
-        _mm256_storeu_si256((__m256i*)(res_text + i), chunk);
+        _mm256_storeu_si256((__m256i *)(res_text + i), chunk);
     }
 
     for (; i < len; i++) {
+        if (text[i] > 127) {
+            return fallback_upcase(str);
+        }
+
         if (text[i] >= 'a' && text[i] <= 'z') {
             res_text[i] = text[i] - 32;
         } else {
@@ -140,11 +170,11 @@ static VALUE upcase_avx1(VALUE self, VALUE str) {
     return result;
 }
 
-static VALUE upcase_avx2(VALUE self, VALUE str) {
-    char *text = StringValuePtr(str);
+static VALUE upcase_avx2(VALUE str) {
+    const unsigned char *text = (const unsigned char *)StringValuePtr(str);
     long len = RSTRING_LEN(str);
     VALUE result = allocate_result_string(str);
-    char *res_text = StringValuePtr(result);
+    unsigned char *res_text = (unsigned char *)StringValuePtr(result);
 
     __m256i lower_a = _mm256_set1_epi8('a');
     __m256i lower_z = _mm256_set1_epi8('z');
@@ -152,8 +182,12 @@ static VALUE upcase_avx2(VALUE self, VALUE str) {
 
     long i;
     for (i = 0; i <= len - 64; i += 64) {
-        __m256i chunk1 = _mm256_loadu_si256((__m256i*)(text + i));
-        __m256i chunk2 = _mm256_loadu_si256((__m256i*)(text + i + 32));
+        __m256i chunk1 = _mm256_loadu_si256((const __m256i *)(text + i));
+        __m256i chunk2 = _mm256_loadu_si256((const __m256i *)(text + i + 32));
+
+        if (_mm256_movemask_epi8(chunk1) != 0 || _mm256_movemask_epi8(chunk2) != 0) {
+            return fallback_upcase(str);
+        }
 
         __m256i mask1_a = _mm256_cmpgt_epi8(chunk1, _mm256_sub_epi8(lower_a, _mm256_set1_epi8(1)));
         __m256i mask1_z = _mm256_cmpgt_epi8(_mm256_set1_epi8('z' + 1), chunk1);
@@ -166,11 +200,15 @@ static VALUE upcase_avx2(VALUE self, VALUE str) {
         chunk1 = _mm256_sub_epi8(chunk1, _mm256_and_si256(mask1, diff));
         chunk2 = _mm256_sub_epi8(chunk2, _mm256_and_si256(mask2, diff));
 
-        _mm256_storeu_si256((__m256i*)(res_text + i), chunk1);
-        _mm256_storeu_si256((__m256i*)(res_text + i + 32), chunk2);
+        _mm256_storeu_si256((__m256i *)(res_text + i), chunk1);
+        _mm256_storeu_si256((__m256i *)(res_text + i + 32), chunk2);
     }
 
     for (; i < len; i++) {
+        if (text[i] > 127) {
+            return fallback_upcase(str);
+        }
+
         if (text[i] >= 'a' && text[i] <= 'z') {
             res_text[i] = text[i] - 32;
         } else {
@@ -183,7 +221,7 @@ static VALUE upcase_avx2(VALUE self, VALUE str) {
 #endif
 
 #if defined(__aarch64__) || defined(__arm64__)
-static VALUE upcase_neon(VALUE self, VALUE str) {
+static VALUE upcase_neon(VALUE str) {
     const uint8_t *text = (const uint8_t *)StringValuePtr(str);
     long len = RSTRING_LEN(str);
     VALUE result = allocate_result_string(str);
@@ -196,6 +234,11 @@ static VALUE upcase_neon(VALUE self, VALUE str) {
     long i;
     for (i = 0; i <= len - 16; i += 16) {
         uint8x16_t chunk = vld1q_u8(text + i);
+
+        if (vmaxvq_u8(chunk) > 127) {
+            return fallback_upcase(str);
+        }
+
         uint8x16_t mask_a = vcgeq_u8(chunk, lower_a);
         uint8x16_t mask_z = vcleq_u8(chunk, lower_z);
         uint8x16_t mask = vandq_u8(mask_a, mask_z);
@@ -205,6 +248,10 @@ static VALUE upcase_neon(VALUE self, VALUE str) {
     }
 
     for (; i < len; i++) {
+        if (text[i] > 127) {
+            return fallback_upcase(str);
+        }
+
         if (text[i] >= 'a' && text[i] <= 'z') {
             res_text[i] = text[i] - ('a' - 'A');
         } else {
@@ -217,36 +264,29 @@ static VALUE upcase_neon(VALUE self, VALUE str) {
 #endif
 
 static VALUE simd_upcase(VALUE self, VALUE str) {
-    // Check if the string is ASCII only
     long len = RSTRING_LEN(str);
-    const unsigned char *text = (const unsigned char *)StringValuePtr(str);
 
-    for (long i = 0; i < len; i++) {
-        if (text[i] > 127) {
-            // Fallback to default Ruby implementation for non-ASCII characters
-            return rb_funcall(str, id_original_upcase, 0);
-        }
+    if (use_ruby_for_small_string(len)) {
+        return fallback_upcase(str);
     }
 
-    // Use SIMD optimized version for ASCII-only strings
 #if defined(__aarch64__) || defined(__arm64__)
     if (has_neon) {
-        return upcase_neon(self, str);
+        return upcase_neon(str);
     }
 #endif
 
 #if defined(__x86_64__) || defined(_M_X64)
     if (has_avx2) {
-        return upcase_avx2(self, str);
+        return upcase_avx2(str);
     } else if (has_avx) {
-        return upcase_avx1(self, str);
+        return upcase_avx1(str);
     } else if (has_sse2) {
-        return upcase_sse2(self, str);
+        return upcase_sse2(str);
     }
 #endif
 
-    // Fallback to default Ruby implementation
-    return rb_funcall(str, id_original_upcase, 0);
+    return fallback_upcase(str);
 }
 
 // Function to return the used instruction set
